@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+import sys
 import tempfile
 import threading
 import tkinter as tk
@@ -14,6 +15,7 @@ DEFAULT_DPI = 200
 IMAGE_DPI = 200
 DOC_DPI = 160
 PPT_DPI = 160
+APP_ICON_RESOURCE = "assets/pdf_tools_icon.ico"
 
 LANGUAGE_LABELS = {"zh": "中文", "en": "English"}
 LABEL_TO_LANGUAGE = {label: code for code, label in LANGUAGE_LABELS.items()}
@@ -213,6 +215,11 @@ class AppError(ValueError):
 
 def translate(language: str, key: str, **params: object) -> str:
     return TEXT[language][key].format(**params)
+
+
+def resource_path(relative_path: str) -> Path:
+    base_path = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
+    return base_path / relative_path
 
 
 def require_import(module_name: str, package_name: str | None = None):
@@ -625,6 +632,7 @@ class PdfToolsApp(tk.Tk):
         super().__init__()
         self.language = "zh"
         self.title(self.tr("app_title"))
+        self.set_window_icon()
         self.geometry("920x650")
         self.minsize(860, 600)
 
@@ -674,6 +682,14 @@ class PdfToolsApp(tk.Tk):
 
     def tr(self, key: str, **params: object) -> str:
         return translate(self.language, key, **params)
+
+    def set_window_icon(self) -> None:
+        icon_path = resource_path(APP_ICON_RESOURCE)
+        if icon_path.is_file():
+            try:
+                self.iconbitmap(default=str(icon_path))
+            except tk.TclError:
+                pass
 
     def set_status(self, key: str, **params: object) -> None:
         self.status_key = key
