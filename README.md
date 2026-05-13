@@ -5,7 +5,7 @@
 ## 功能
 
 - PDF 转图片：按 PDF 原页码输出 `1.png`、`2.png`、`3.png`
-- 合并 PDF：按列表顺序合并多个 PDF
+- 合并 PDF：按列表顺序合并多个 PDF，可选择输出路径和文件名
 - 拆分 PDF：每页一个 PDF，或把选中页合成一个 PDF
 - PDF 转 Word：把每页渲染成图片并写入 `.docx`
 - PDF 转 PPT：把每页渲染成图片并写入 `.pptx`
@@ -21,6 +21,26 @@
 ```
 
 留空表示导出全部页面。
+
+## 合并 PDF 默认命名
+
+合并 PDF 时：
+
+- `输出路径` 留空：默认保存到第一个待合并 PDF 所在文件夹
+- `合并文件名` 留空：默认使用 `合并PDF_YYYYMMDD_HHMM.pdf`
+- 文件名可以不写 `.pdf` 后缀，程序会自动补上
+
+## 转换/解密默认命名
+
+PDF 转 Word/PPT、Word/PPT 转 PDF、解密 PDF 时：
+
+- `输出路径` 留空：默认保存到源文件所在文件夹
+- `Word 文件名` 留空：默认使用 `PDF转Word_YYYYMMDD_HHMM.docx`
+- `PPT 文件名` 留空：默认使用 `PDF转PPT_YYYYMMDD_HHMM.pptx`
+- Word 转 PDF 的 `PDF 文件名` 留空：默认使用 `Word转PDF_YYYYMMDD_HHMM.pdf`
+- PPT 转 PDF 的 `PDF 文件名` 留空：默认使用 `PPT转PDF_YYYYMMDD_HHMM.pdf`
+- 解密 PDF 的 `PDF 文件名` 留空：默认使用 `解密PDF_YYYYMMDD_HHMM.pdf`
+- 文件名可以不写后缀，程序会自动补上
 
 ## 转换说明
 

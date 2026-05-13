@@ -5,6 +5,7 @@ import subprocess
 import tempfile
 import threading
 import tkinter as tk
+from datetime import datetime
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
@@ -33,6 +34,16 @@ TEXT = {
         "pdf_files_to_merge": "待合并 PDF",
         "office_file": "Word/PPT 文件",
         "output_folder": "输出文件夹",
+        "merge_output_folder": "输出路径",
+        "merge_file_name": "合并文件名",
+        "merge_name_hint": "留空 = 合并PDF_日期时间.pdf",
+        "word_file_name": "Word 文件名",
+        "word_name_hint": "留空 = PDF转Word_日期时间.docx",
+        "ppt_file_name": "PPT 文件名",
+        "ppt_name_hint": "留空 = PDF转PPT_日期时间.pptx",
+        "pdf_file_name": "PDF 文件名",
+        "office_pdf_name_hint": "留空 = Word转PDF/PPT转PDF_日期时间.pdf",
+        "decrypt_pdf_name_hint": "留空 = 解密PDF_日期时间.pdf",
         "output_pdf": "输出 PDF",
         "output_word": "输出 Word",
         "output_ppt": "输出 PPT",
@@ -76,6 +87,7 @@ TEXT = {
         "valid_office": "请选择有效的 Word/PPT 文件。",
         "valid_output_folder": "请选择有效的输出文件夹。",
         "valid_output_file": "请选择输出文件。",
+        "invalid_file_name": "文件名不能包含以下字符：\\ / : * ? \" < > |",
         "need_two_pdfs": "请至少添加两个 PDF 文件。",
         "dpi_number": "DPI 必须是数字。",
         "dpi_range": "DPI 必须在 72 到 600 之间。",
@@ -113,6 +125,16 @@ TEXT = {
         "pdf_files_to_merge": "PDF files to merge",
         "office_file": "Word/PPT file",
         "output_folder": "Output folder",
+        "merge_output_folder": "Output path",
+        "merge_file_name": "Merged file name",
+        "merge_name_hint": "Blank = MergedPDF_date_time.pdf",
+        "word_file_name": "Word file name",
+        "word_name_hint": "Blank = PDFToWord_date_time.docx",
+        "ppt_file_name": "PPT file name",
+        "ppt_name_hint": "Blank = PDFToPPT_date_time.pptx",
+        "pdf_file_name": "PDF file name",
+        "office_pdf_name_hint": "Blank = WordToPDF/PPTToPDF_date_time.pdf",
+        "decrypt_pdf_name_hint": "Blank = DecryptedPDF_date_time.pdf",
         "output_pdf": "Output PDF",
         "output_word": "Output Word",
         "output_ppt": "Output PPT",
@@ -156,6 +178,7 @@ TEXT = {
         "valid_office": "Please select a valid Word/PPT file.",
         "valid_output_folder": "Please select a valid output folder.",
         "valid_output_file": "Please select an output file.",
+        "invalid_file_name": "File name cannot contain: \\ / : * ? \" < > |",
         "need_two_pdfs": "Please add at least two PDF files.",
         "dpi_number": "DPI must be a number.",
         "dpi_range": "DPI must be between 72 and 600.",
@@ -538,6 +561,65 @@ def ensure_output_file(path: Path, suffix: str) -> Path:
     return path
 
 
+def default_output_file_name(prefix: str, suffix: str) -> str:
+    return f"{prefix}_{datetime.now():%Y%m%d_%H%M}{suffix}"
+
+
+def default_merge_file_name() -> str:
+    return default_output_file_name("合并PDF", ".pdf")
+
+
+def normalize_output_file_name(name: str, default_name: str, suffix: str) -> str:
+    clean_name = name.strip()
+    if not clean_name:
+        clean_name = default_name
+
+    invalid_chars = set('\\/:*?"<>|')
+    if any(char in invalid_chars for char in clean_name):
+        raise AppError("invalid_file_name")
+
+    if Path(clean_name).name != clean_name:
+        raise AppError("invalid_file_name")
+
+    if Path(clean_name).suffix.lower() != suffix:
+        clean_name = f"{clean_name}{suffix}"
+
+    return clean_name
+
+
+def normalize_pdf_file_name(name: str) -> str:
+    return normalize_output_file_name(name, default_merge_file_name(), ".pdf")
+
+
+def build_merge_output_pdf(pdf_paths: list[Path], output_folder: str, file_name: str) -> Path:
+    if output_folder.strip():
+        folder = Path(output_folder.strip())
+    else:
+        folder = pdf_paths[0].parent
+
+    ensure_output_folder(folder)
+    return folder / normalize_pdf_file_name(file_name)
+
+
+def build_named_output_file(
+    source: Path,
+    output_folder: str,
+    file_name: str,
+    default_prefix: str,
+    suffix: str,
+) -> Path:
+    folder = Path(output_folder.strip()) if output_folder.strip() else source.parent
+    ensure_output_folder(folder)
+    default_name = default_output_file_name(default_prefix, suffix)
+    return folder / normalize_output_file_name(file_name, default_name, suffix)
+
+
+def office_to_pdf_default_prefix(source: Path) -> str:
+    if source.suffix.lower() in {".doc", ".docx"}:
+        return "Word转PDF"
+    return "PPT转PDF"
+
+
 class PdfToolsApp(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
@@ -561,7 +643,8 @@ class PdfToolsApp(tk.Tk):
         self.image_password = tk.StringVar()
 
         self.merge_files: list[Path] = []
-        self.merge_output = tk.StringVar()
+        self.merge_output_folder = tk.StringVar()
+        self.merge_file_name = tk.StringVar()
         self.merge_password = tk.StringVar()
 
         self.split_pdf_path = tk.StringVar()
@@ -573,14 +656,17 @@ class PdfToolsApp(tk.Tk):
         self.office_pdf_path = tk.StringVar()
         self.office_pages = tk.StringVar()
         self.office_password = tk.StringVar()
-        self.office_word_output = tk.StringVar()
-        self.office_ppt_output = tk.StringVar()
+        self.office_output_folder = tk.StringVar()
+        self.office_word_file_name = tk.StringVar()
+        self.office_ppt_file_name = tk.StringVar()
 
         self.source_office = tk.StringVar()
-        self.office_pdf_output = tk.StringVar()
+        self.office_pdf_output_folder = tk.StringVar()
+        self.office_pdf_file_name = tk.StringVar()
 
         self.decrypt_source = tk.StringVar()
-        self.decrypt_output = tk.StringVar()
+        self.decrypt_output_folder = tk.StringVar()
+        self.decrypt_file_name = tk.StringVar()
         self.decrypt_password = tk.StringVar()
 
         self._build_ui()
@@ -709,10 +795,12 @@ class PdfToolsApp(tk.Tk):
             button.pack(fill=tk.X, pady=3)
             self.register_text(key, button)
 
-        self.labeled_entry(tab, 1, "output_pdf", self.merge_output, lambda: self.pick_save_pdf(self.merge_output))
-        self.labeled_entry(tab, 2, "password", self.merge_password, show="*")
-        self.add_hint(tab, 2, "password_hint")
-        self.add_action_button(tab, 3, "merge", self.start_merge)
+        self.labeled_entry(tab, 1, "merge_output_folder", self.merge_output_folder, lambda: self.pick_folder(self.merge_output_folder))
+        self.labeled_entry(tab, 2, "merge_file_name", self.merge_file_name)
+        self.add_hint(tab, 2, "merge_name_hint")
+        self.labeled_entry(tab, 3, "password", self.merge_password, show="*")
+        self.add_hint(tab, 3, "password_hint")
+        self.add_action_button(tab, 4, "merge", self.start_merge)
 
     def build_split_tab(self) -> None:
         tab = self.make_tab("tab_split")
@@ -742,11 +830,14 @@ class PdfToolsApp(tk.Tk):
         self.add_hint(tab, 1, "password_hint")
         self.labeled_entry(tab, 2, "pages", self.office_pages)
         self.add_hint(tab, 2, "pages_hint")
-        self.labeled_entry(tab, 3, "output_word", self.office_word_output, lambda: self.pick_save_docx(self.office_word_output))
-        self.labeled_entry(tab, 4, "output_ppt", self.office_ppt_output, lambda: self.pick_save_pptx(self.office_ppt_output))
+        self.labeled_entry(tab, 3, "merge_output_folder", self.office_output_folder, lambda: self.pick_folder(self.office_output_folder))
+        self.labeled_entry(tab, 4, "word_file_name", self.office_word_file_name)
+        self.add_hint(tab, 4, "word_name_hint")
+        self.labeled_entry(tab, 5, "ppt_file_name", self.office_ppt_file_name)
+        self.add_hint(tab, 5, "ppt_name_hint")
 
         button_row = ttk.Frame(tab)
-        button_row.grid(row=5, column=1, columnspan=2, sticky="e", pady=(16, 7))
+        button_row.grid(row=6, column=1, columnspan=2, sticky="e", pady=(16, 7))
         word_button = ttk.Button(button_row, command=self.start_pdf_to_word)
         word_button.pack(side=tk.LEFT, padx=4)
         self.register_text("to_word", word_button)
@@ -757,15 +848,19 @@ class PdfToolsApp(tk.Tk):
     def build_office_to_pdf_tab(self) -> None:
         tab = self.make_tab("tab_office_to_pdf")
         self.labeled_entry(tab, 0, "office_file", self.source_office, lambda: self.pick_office(self.source_office))
-        self.labeled_entry(tab, 1, "output_pdf", self.office_pdf_output, lambda: self.pick_save_pdf(self.office_pdf_output))
-        self.add_action_button(tab, 2, "to_pdf", self.start_office_to_pdf)
+        self.labeled_entry(tab, 1, "merge_output_folder", self.office_pdf_output_folder, lambda: self.pick_folder(self.office_pdf_output_folder))
+        self.labeled_entry(tab, 2, "pdf_file_name", self.office_pdf_file_name)
+        self.add_hint(tab, 2, "office_pdf_name_hint")
+        self.add_action_button(tab, 3, "to_pdf", self.start_office_to_pdf)
 
     def build_decrypt_tab(self) -> None:
         tab = self.make_tab("tab_decrypt")
         self.labeled_entry(tab, 0, "pdf_file", self.decrypt_source, lambda: self.pick_pdf(self.decrypt_source))
         self.labeled_entry(tab, 1, "password", self.decrypt_password, show="*")
-        self.labeled_entry(tab, 2, "output_pdf", self.decrypt_output, lambda: self.pick_save_pdf(self.decrypt_output))
-        self.add_action_button(tab, 3, "decrypt", self.start_decrypt)
+        self.labeled_entry(tab, 2, "merge_output_folder", self.decrypt_output_folder, lambda: self.pick_folder(self.decrypt_output_folder))
+        self.labeled_entry(tab, 3, "pdf_file_name", self.decrypt_file_name)
+        self.add_hint(tab, 3, "decrypt_pdf_name_hint")
+        self.add_action_button(tab, 4, "decrypt", self.start_decrypt)
 
     def add_hint(self, parent: ttk.Frame, row: int, key: str) -> None:
         hint = ttk.Label(parent, foreground="#666666")
@@ -967,7 +1062,11 @@ class PdfToolsApp(tk.Tk):
                 raise AppError("need_two_pdfs")
             for pdf in self.merge_files:
                 ensure_pdf(pdf)
-            output = ensure_output_file(Path(self.merge_output.get()), ".pdf")
+            output = build_merge_output_pdf(
+                self.merge_files,
+                self.merge_output_folder.get(),
+                self.merge_file_name.get(),
+            )
             count = merge_pdfs(self.merge_files, output, self.merge_password.get())
             return {"count": count, "output": output}
 
@@ -989,7 +1088,13 @@ class PdfToolsApp(tk.Tk):
         def task():
             pdf = Path(self.office_pdf_path.get())
             ensure_pdf(pdf)
-            output = ensure_output_file(Path(self.office_word_output.get()), ".docx")
+            output = build_named_output_file(
+                pdf,
+                self.office_output_folder.get(),
+                self.office_word_file_name.get(),
+                "PDF转Word",
+                ".docx",
+            )
             pdf_to_word(pdf, output, self.office_pages.get(), self.office_password.get(), self.make_progress_callback())
             return {"output": output}
 
@@ -999,7 +1104,13 @@ class PdfToolsApp(tk.Tk):
         def task():
             pdf = Path(self.office_pdf_path.get())
             ensure_pdf(pdf)
-            output = ensure_output_file(Path(self.office_ppt_output.get()), ".pptx")
+            output = build_named_output_file(
+                pdf,
+                self.office_output_folder.get(),
+                self.office_ppt_file_name.get(),
+                "PDF转PPT",
+                ".pptx",
+            )
             pdf_to_ppt(pdf, output, self.office_pages.get(), self.office_password.get(), self.make_progress_callback())
             return {"output": output}
 
@@ -1010,7 +1121,13 @@ class PdfToolsApp(tk.Tk):
             source = Path(self.source_office.get())
             if not source.is_file():
                 raise AppError("valid_office")
-            output = ensure_output_file(Path(self.office_pdf_output.get()), ".pdf")
+            output = build_named_output_file(
+                source,
+                self.office_pdf_output_folder.get(),
+                self.office_pdf_file_name.get(),
+                office_to_pdf_default_prefix(source),
+                ".pdf",
+            )
             office_to_pdf(source, output)
             return {"output": output}
 
@@ -1020,7 +1137,13 @@ class PdfToolsApp(tk.Tk):
         def task():
             source = Path(self.decrypt_source.get())
             ensure_pdf(source)
-            output = ensure_output_file(Path(self.decrypt_output.get()), ".pdf")
+            output = build_named_output_file(
+                source,
+                self.decrypt_output_folder.get(),
+                self.decrypt_file_name.get(),
+                "解密PDF",
+                ".pdf",
+            )
             decrypt_pdf(source, output, self.decrypt_password.get())
             return {"output": output}
 
